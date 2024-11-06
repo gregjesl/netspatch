@@ -2,7 +2,7 @@ use std::{
     env, io::{prelude::*, BufReader}, net::{TcpListener, TcpStream}, sync::{Arc, Mutex}
 };
 
-use netspatch::http::{HTTPMethod, HTTPRequest, HTTPResponse};
+use netspatch::{http::{HTTPMethod, HTTPRequest, HTTPResponse}, job::{create_job, Job, JobIterator, Serial}};
 
 fn main() {
     let mut host = "localhost".to_string();
@@ -48,7 +48,7 @@ fn main() {
         panic!("No dimensions provided");
     }
     assert!(dimensions.len() > 0);
-    let index = Arc::new(Mutex::new(0 as usize));
+    let index = Arc::new(Mutex::new(create_job(dimensions)));
 
     let addr = format!("{}:{}", host, port);
     println!("Address: {addr}");
@@ -61,7 +61,7 @@ fn main() {
     }
 }
 
-fn handle_connection(mut stream: TcpStream, index: Arc<Mutex<usize>>) {
+fn handle_connection(mut stream: TcpStream, index: Arc<Mutex<Job>>) {
     let buf_reader = BufReader::new(&mut stream);
 
     let raw: Vec<_> = buf_reader
@@ -74,11 +74,20 @@ fn handle_connection(mut stream: TcpStream, index: Arc<Mutex<usize>>) {
         Ok(request) => {
             match request.method {
                 HTTPMethod::GET => {
+                    
                     let mut response = HTTPResponse::new(netspatch::http::HTTPResponseCode::OK);
-                    {
+                    if request.uri.len() > 0 {
+                        response = HTTPResponse::new(netspatch::http::HTTPResponseCode::NotFound);
+                    } else {
                         let mut payload = index.lock().unwrap();
-                        response.content = payload.to_string();
-                        *payload += 1;
+                        match (*payload).next() {
+                            Some(job) => {
+                                response.content = job.to_string();
+                            }
+                            None => {
+                                response = HTTPResponse::new(netspatch::http::HTTPResponseCode::NoContent);
+                            }
+                        }
                     }
                     stream.write_all(response.as_string().as_bytes()).unwrap();
                 }
