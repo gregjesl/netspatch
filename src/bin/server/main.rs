@@ -1,15 +1,14 @@
 use std::{
-    env, io::{prelude::*, BufReader}, net::{TcpListener, TcpStream}, sync::{Arc, Mutex}
+    env, io::{prelude::*, BufReader}, net::{TcpListener, TcpStream}, process::exit, sync::{Arc, Mutex}
 };
 
-use netspatch::{http::{HTTPMethod, HTTPRequest, HTTPResponse}, job::{create_job, Job, JobIterator, Serial}};
+use netspatch::{http::{HTTPMethod, HTTPRequest, HTTPResponse}, job::JobManager};
 
 fn main() {
     let mut host = "localhost".to_string();
     let mut port = "7878".to_string();
 
     let mut args: Vec<String> = env::args().collect();
-    println!("Arguements: {args:#?}");
     args.remove(0);
 
     let mut dimensions: Vec<usize> = Vec::new();
@@ -45,10 +44,11 @@ fn main() {
     }
 
     if dimensions.len() == 0 {
-        panic!("No dimensions provided");
+        eprintln!("No dimensions provided");
+        exit(1);
     }
     assert!(dimensions.len() > 0);
-    let index = Arc::new(Mutex::new(create_job(dimensions)));
+    let stack = Arc::new(Mutex::new(JobManager::new(&dimensions).unwrap()));
 
     let addr = format!("{}:{}", host, port);
     println!("Address: {addr}");
@@ -57,11 +57,11 @@ fn main() {
     for stream in listener.incoming() {
         let stream = stream.unwrap();
 
-        handle_connection(stream, index.clone());
+        handle_connection(stream, stack.clone());
     }
 }
 
-fn handle_connection(mut stream: TcpStream, index: Arc<Mutex<Job>>) {
+fn handle_connection(mut stream: TcpStream, index: Arc<Mutex<JobManager>>) {
     let buf_reader = BufReader::new(&mut stream);
 
     let raw: Vec<_> = buf_reader
@@ -80,7 +80,7 @@ fn handle_connection(mut stream: TcpStream, index: Arc<Mutex<Job>>) {
                         response = HTTPResponse::new(netspatch::http::HTTPResponseCode::NotFound);
                     } else {
                         let mut payload = index.lock().unwrap();
-                        match (*payload).next() {
+                        match (*payload).pop() {
                             Some(job) => {
                                 response.content = job.to_string();
                             }

@@ -1,9 +1,5 @@
 use std::collections::HashMap;
 
-use std::{
-    env, io::{prelude::*, BufReader}, net::{TcpListener, TcpStream}, sync::{Arc, Mutex}
-};
-
 #[derive(Clone, PartialEq)]
 pub enum HTTPMethod {
     GET,
