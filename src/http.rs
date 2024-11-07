@@ -6,6 +6,15 @@ pub enum HTTPMethod {
     POST,
 }
 
+impl HTTPMethod {
+    fn to_string(&self) -> String {
+        return match self {
+            Self::GET => "GET".to_string(),
+            Self::POST => "POST".to_string(),
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct RequestLine {
     pub method: HTTPMethod,
@@ -53,6 +62,36 @@ pub struct HTTPRequest {
 }
 
 impl HTTPRequest {
+    pub fn new(method: HTTPMethod, uri: String) -> Self {
+        return Self {
+            method,
+            uri,
+            version: "HTTP/1.1".to_string(),
+            headers: HashMap::new(),
+            body: String::new()
+        };
+    }
+
+    pub fn to_string(&self) -> String {
+        let mut result = format!("{} /{} {}\r\n", self.method.to_string(), self.uri, self.version);
+        let mut headers = self.headers.clone();
+        if !self.body.is_empty() {
+            if self.method == HTTPMethod::GET {
+                panic!("Attempting to send a body in a GET request");
+            }
+            headers.insert("Content-Length".to_string(), self.body.len().to_string());
+        }
+        for (key, value) in headers {
+            let header = format!("{key}: {value}\r\n").to_string();
+            result.push_str(&header);
+        }
+        result.push_str("\r\n");
+        if !self.body.is_empty() {
+            result.push_str(&self.body);
+        }
+        return result;
+    }
+
     pub fn parse(raw: Vec<String>) -> Result<Self, HTTPResponseCode> {
         if raw.len() == 0 {
             return Err(HTTPResponseCode::BadRequest);
@@ -93,6 +132,28 @@ pub enum HTTPResponseCode {
 }
 
 impl HTTPResponseCode {
+    fn from_code(code: u32) -> Option<HTTPResponseCode> {
+        return match code {
+            200 => Some(HTTPResponseCode::OK),
+            204 => Some(HTTPResponseCode::NoContent),
+            400 => Some(HTTPResponseCode::BadRequest),
+            404 => Some(HTTPResponseCode::NotFound),
+            405 => Some(HTTPResponseCode::MethodNotAllowed),
+            409 => Some(HTTPResponseCode::Conflict),
+            500 => Some(HTTPResponseCode::InternalServerError),
+            505 => Some(HTTPResponseCode::HTTPVersionNotSupported),
+            _ => None,
+        };
+    }
+
+    fn from_string(code: String) -> Option<HTTPResponseCode> {
+        let ucode = code.parse::<u32>();
+        if ucode.is_err() {
+            return None;
+        }
+        return Self::from_code(ucode.unwrap());
+    }
+
     fn to_string(&self) -> String {
         return match self {
             Self::OK => "OK".to_string(),
@@ -136,6 +197,37 @@ impl HTTPResponse {
             headers: HashMap::new(),
             content: String::new()
         };
+    }
+
+    pub fn parse(raw: Vec<String>) -> Option<Self> {
+        if raw.len() == 0 { 
+            return None; 
+        }
+        let startline = raw.first()?;
+        let (version, rem) = startline.split_once(' ')?;
+        let (code, text) = rem.split_once(' ')?;
+        let mut headers = HashMap::new();
+        for i in 1..raw.len() {
+            let (key, value) = raw.get(i)?.split_once(": ")?;
+            let mut value_string = value.to_string();
+            headers.insert(key.to_string(), value_string);
+        }
+        return Some(Self {
+            version: version.to_string(),
+            status: HTTPResponseCode::from_string(code.to_string())?,
+            headers,
+            content: String::new()
+        });
+    }
+
+    pub fn expected_body_length(&self) -> usize {
+        let key = "Content-Length".to_string();
+        if !self.headers.contains_key(&key) {
+            return 0
+        };
+        let length_str = self.headers.get(&key).unwrap();
+        let err = format!("Could not parse Content-Length: {}", length_str);
+        return length_str.parse::<usize>().expect(&err);
     }
 
     pub fn as_string(&self) -> String {

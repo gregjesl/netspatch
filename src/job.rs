@@ -26,6 +26,31 @@ impl JobDimension {
         });
     }
 
+    pub fn parse(input: &String) -> Result<JobDimension, Error> {
+        let split = input.split_once('/');
+        if split.is_none() {
+            return Err(Error::UnexpectedString);
+        } else {
+            let (index_str, span_str) = split.unwrap();
+            let index = match index_str.parse::<usize>() {
+                Ok(value) => value,
+                Err(_) => return Err(Error::UnexpectedString)
+            };
+            let span = match span_str.parse::<usize>() {
+                Ok(value) => value,
+                Err(_) => return Err(Error::UnexpectedString)
+            };
+            if index >= span {
+                return Err(Error::OutOfBounds);
+            } else {
+                return Ok(Self {
+                    index,
+                    span,
+                });
+            }
+        }
+    }
+
     pub fn has_job(&self) -> bool {
         return self.index < self.span;
     }
@@ -98,6 +123,27 @@ impl Job {
             index: result
         });
     }
+
+    /*
+    pub fn parse(input: &String) -> Result<Self, Error> {
+        let mut rem = input;
+        let mut result = Vec::new();
+        while rem.len() > 0 {
+            let split = input.split_once("\r\n");
+            if split.is_none() {
+                return Err(Error::UnexpectedString)
+            }
+            let (value, next) = split.unwrap();
+            let entry = JobDimension::parse(&value.to_string())?;
+            result.push(entry);
+            let next_str= next.to_string();
+            rem = next_str;
+        }
+        return Ok(Self {
+            index: result
+        });
+    }
+     */
 
     pub fn order(&self) -> usize {
         return self.index.len();
@@ -268,6 +314,14 @@ impl JobManager {
 mod tests {
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
+
+    #[test]
+    fn test_job_dimension_parse() {
+        let result = JobDimension::parse(&"1/3".to_string());
+        assert!(result.is_ok());
+        assert_eq!(result.as_ref().unwrap().index, 1);
+        assert_eq!(result.as_ref().unwrap().span, 3);
+    }
 
     #[test]
     fn test_job_dimension_iterator() {
