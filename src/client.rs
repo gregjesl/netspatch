@@ -96,4 +96,19 @@ impl Client {
             }
         }
     }
+
+    pub fn respond(&mut self, result: String) {
+        if self.job.is_none() {
+            panic!("Attempted to respond when no job is loaded");
+        }
+
+        // Build the request
+        let job = self.job.clone().unwrap();
+        let mut request = HTTPRequest::new(HTTPMethod::POST, job.to_uri());
+        request.body = result;
+
+        // Send the request
+        self.send(request).expect("Error when sending job response");
+        self.job = None;
+    }
 }

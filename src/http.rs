@@ -53,6 +53,20 @@ impl RequestLine {
     }
 }
 
+pub trait HTTPHeaders {
+    fn headers(&self) -> &HashMap<String, String>;
+
+    fn expected_body_length(&self) -> usize {
+        let key: String = "Content-Length".to_string();
+        if !self.headers().contains_key(&key) {
+            return 0
+        };
+        let length_str = self.headers().get(&key).unwrap();
+        let err = format!("Could not parse Content-Length: {}", length_str);
+        return length_str.parse::<usize>().expect(&err);
+    }
+}
+
 pub struct HTTPRequest {
     pub method: HTTPMethod,
     pub uri: String,
@@ -89,6 +103,7 @@ impl HTTPRequest {
         if !self.body.is_empty() {
             result.push_str(&self.body);
         }
+        result.push_str("\r\n");
         return result;
     }
 
@@ -116,6 +131,35 @@ impl HTTPRequest {
             headers,
             body: String::new(),
         })
+    }
+
+    pub fn read(mut reader: BufReader<&TcpStream>) -> Result<HTTPRequest, HTTPResponseCode> {
+        let mut raw = Vec::new();
+        loop {
+            let mut line = String::new();
+            reader.read_line(&mut line).expect("Could not read line");
+            if line == "\r\n" {
+                break;
+            } else if line.len() == 0 {
+                return Err(HTTPResponseCode::BadRequest);
+            }
+            line.pop();
+            line.pop();
+            raw.push(line);
+        }
+        let mut request = HTTPRequest::parse(raw)?;
+        let body_len = request.expected_body_length();
+
+        while request.body.len() < body_len {
+            reader.read_line(&mut request.body).expect("Could not read line");
+        }
+        return Ok(request);
+    }
+}
+
+impl HTTPHeaders for HTTPRequest {
+    fn headers(&self) -> &HashMap<String, String> {
+        return &self.headers;
     }
 }
 
@@ -243,16 +287,6 @@ impl HTTPResponse {
         return Some(response);
     }
 
-    pub fn expected_body_length(&self) -> usize {
-        let key = "Content-Length".to_string();
-        if !self.headers.contains_key(&key) {
-            return 0
-        };
-        let length_str = self.headers.get(&key).unwrap();
-        let err = format!("Could not parse Content-Length: {}", length_str);
-        return length_str.parse::<usize>().expect(&err);
-    }
-
     pub fn as_string(&self) -> String {
         let mut result = format!("{} {} {}\r\n", self.version, self.status.to_code(), self.status.to_string());
         let mut headers = self.headers.clone();
@@ -271,5 +305,11 @@ impl HTTPResponse {
         }
         result.push_str("\r\n");
         return result;
+    }
+}
+
+impl HTTPHeaders for HTTPResponse {
+    fn headers(&self) -> &HashMap<String, String> {
+        return &self.headers;
     }
 }

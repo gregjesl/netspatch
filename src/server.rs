@@ -52,42 +52,45 @@ impl Server {
 }
 
 fn handle_connection(mut stream: TcpStream, index: Arc<Mutex<JobManager>>) {
-    let buf_reader = BufReader::new(&mut stream);
+    let buf_reader = BufReader::new(&stream);
 
-    let raw: Vec<_> = buf_reader
-            .lines()
-            .map(|result| result.unwrap())
-            .take_while(|line| !line.is_empty())
-            .collect();
-
-    match HTTPRequest::parse(raw) {
-        Ok(request) => {
-            match request.method {
-                HTTPMethod::GET => {
-                    
-                    let mut response = HTTPResponse::new(HTTPResponseCode::OK);
-                    if request.uri.len() > 0 {
-                        response = HTTPResponse::new(HTTPResponseCode::NotFound);
-                    } else {
-                        let mut payload = index.lock().unwrap();
-                        match (*payload).pop() {
-                            Some(job) => {
-                                response.content = job.to_string();
-                            }
-                            None => {
-                                response = HTTPResponse::new(HTTPResponseCode::NoContent);
-                            }
-                        }
-                    }
-                    stream.write_all(response.as_string().as_bytes()).unwrap();
-                }
-                HTTPMethod::POST => {
-                    stream.write_all(HTTPResponse::new(HTTPResponseCode::MethodNotAllowed).as_string().as_bytes()).unwrap();
-                }
-            }
-        }
+    let request = match HTTPRequest::read(buf_reader) {
+        Ok(value) => value,
         Err(code) => {
             stream.write_all(HTTPResponse::new(code).as_string().as_bytes()).unwrap();
+            return;
+        }
+    };
+
+    match request.method {
+        HTTPMethod::GET => {
+            let mut response = HTTPResponse::new(HTTPResponseCode::OK);
+            if request.uri.len() > 0 {
+                response = HTTPResponse::new(HTTPResponseCode::NotFound);
+            } else {
+                let mut payload = index.lock().unwrap();
+                match (*payload).pop() {
+                    Some(job) => {
+                        response.content = job.to_string();
+                    }
+                    None => {
+                        response = HTTPResponse::new(HTTPResponseCode::NoContent);
+                    }
+                }
+            }
+            stream.write_all(response.as_string().as_bytes()).unwrap();
+        }
+        HTTPMethod::POST => {
+            let mut manager = index.lock().unwrap();
+            match manager.complete(request.uri) {
+                Ok(_) => { 
+                    println!("{}",request.body);
+                    stream.write_all(HTTPResponse::new(HTTPResponseCode::OK).as_string().as_bytes()).unwrap();
+                }
+                Err(_) => {
+                    stream.write_all(HTTPResponse::new(HTTPResponseCode::NotFound).as_string().as_bytes()).unwrap();
+                }
+            }
         }
     }
 }

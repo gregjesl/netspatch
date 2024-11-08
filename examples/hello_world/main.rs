@@ -19,10 +19,12 @@ fn main() {
 
     // Create a client
     let mut client = Client::new(host, port);
-    for i in 0..5 {
+    for _ in 0..5 {
         match client.query() {
             GetJobResult::JobLoaded => {
-                println!("Client: Loaded job with URI {}", client.job.clone().unwrap().to_uri());
+                let job = client.job.clone().unwrap();
+                println!("Client: Loaded job with URI {}", job.to_uri());
+                client.respond(format!("Client says \"Hello World\" in response to job {}", job.to_uri()));
             }
             GetJobResult::NoJobsLeft => {
                 println!("Client: No jobs left");
