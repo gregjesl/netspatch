@@ -39,14 +39,13 @@ impl Server {
     }
 
     pub fn stop(self) -> Result<(), std::io::Error> {
-        let mut client = Client::connect(&self.host, self.port)?;
+        let mut client = Client::new(self.host, self.port);
         {
             let mut lock = self.shutdown.lock().unwrap();
             *lock = true;
             let request = HTTPRequest::new(crate::http::HTTPMethod::GET, "server".to_string());
-            client.send(&request)?;
+            client.send(request)?;
         }
-        client.disconnect()?;
         self.handle.join().expect("Could not join server thread");
         return Ok(());
     }

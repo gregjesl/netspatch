@@ -1,4 +1,4 @@
-use netspatch::{client::Client, job::JobManager, server::Server};
+use netspatch::{client::{Client, GetJobResult}, job::JobManager, server::Server};
 use std::{sync::{Arc,Mutex}, thread::sleep, time::Duration};
 
 fn main() {
@@ -10,6 +10,7 @@ fn main() {
     ));
 
     // Create the server
+    print!("Attempting to start server... ");
     let server = Server::start(&host, port, stack).expect("Could not start server");
     println!("Server started");
 
@@ -17,24 +18,25 @@ fn main() {
     sleep(Duration::new(1, 0));
 
     // Create a client
-    let mut client = Client::connect(&host, port).expect("Could not connect to server");
-    println!("Client connected");
+    let mut client = Client::new(host, port);
+    for i in 0..5 {
+        match client.query() {
+            GetJobResult::JobLoaded => {
+                println!("Client: Loaded job with URI {}", client.job.clone().unwrap().to_uri());
+            }
+            GetJobResult::NoJobsLeft => {
+                println!("Client: No jobs left");
+                break;
+            }
+            GetJobResult::Error => {
+                println!("Client: Error encountered");
+                break;
+            }
+        }
+        sleep(Duration::new(1, 0));
+    }
 
-    // Wait
-    sleep(Duration::new(1, 0));
-
-    // Request job
-    client.get_job().expect("Failed to get job");
-    
-    // Wait
-    sleep(Duration::new(1, 0));
-
-    // Disconnect
-    client.disconnect().expect("Error disconnecting client");
-    println!("Client disconnected");
-
-    // Wait
-    sleep(Duration::new(1, 0));
+    print!("Attempting to shut down server... ");
 
     // Shutdown
     server.stop().expect("Could not stop server");

@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt::Error, io::{BufReader, BufRead}, net::TcpStream};
 
 #[derive(Clone, PartialEq)]
 pub enum HTTPMethod {
@@ -184,8 +184,8 @@ impl HTTPResponseCode {
 #[derive(Clone)]
 pub struct HTTPResponse {
     version: String,
-    status: HTTPResponseCode,
-    headers: HashMap<String, String>,
+    pub status: HTTPResponseCode,
+    pub headers: HashMap<String, String>,
     pub content: String,
 }
 
@@ -220,6 +220,29 @@ impl HTTPResponse {
         });
     }
 
+    pub fn read(mut reader: BufReader<&TcpStream>) -> Option<HTTPResponse> {
+        let mut raw = Vec::new();
+        loop {
+            let mut line = String::new();
+            reader.read_line(&mut line).expect("Could not read line");
+            if line == "\r\n" {
+                break;
+            } else if line.len() == 0 {
+                return None;
+            }
+            line.pop();
+            line.pop();
+            raw.push(line);
+        }
+        let mut response = HTTPResponse::parse(raw)?;
+        let body_len = response.expected_body_length();
+
+        while response.content.len() < body_len {
+            reader.read_line(&mut response.content).expect("Could not read line");
+        }
+        return Some(response);
+    }
+
     pub fn expected_body_length(&self) -> usize {
         let key = "Content-Length".to_string();
         if !self.headers.contains_key(&key) {
@@ -246,6 +269,7 @@ impl HTTPResponse {
             result.push_str("\r\n");
             result.push_str(&self.content);
         }
+        result.push_str("\r\n");
         return result;
     }
 }

@@ -124,26 +124,23 @@ impl Job {
         });
     }
 
-    /*
     pub fn parse(input: &String) -> Result<Self, Error> {
-        let mut rem = input;
-        let mut result = Vec::new();
-        while rem.len() > 0 {
-            let split = input.split_once("\r\n");
-            if split.is_none() {
-                return Err(Error::UnexpectedString)
+        let rows: Vec<_> = input.split("\r\n").collect();
+        if rows.len() == 0 {
+            return  Err(Error::ZeroSizedDimension);
+        }
+        let mut result = Vec::with_capacity(rows.len());
+        for row in rows {
+            if row.len() == 0 {
+                continue;
             }
-            let (value, next) = split.unwrap();
-            let entry = JobDimension::parse(&value.to_string())?;
-            result.push(entry);
-            let next_str= next.to_string();
-            rem = next_str;
+            let dimension = JobDimension::parse(&row.to_string())?;
+            result.push(dimension);
         }
         return Ok(Self {
             index: result
         });
     }
-     */
 
     pub fn order(&self) -> usize {
         return self.index.len();
