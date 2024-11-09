@@ -6,6 +6,7 @@ pub struct Client {
     host: String,
     port: u32,
     pub job: Option<Job>,
+    timeout: Duration,
 }
 
 pub enum GetJobResult {
@@ -19,8 +20,14 @@ impl Client {
         return Self {
             host,
             port,
-            job: None
+            job: None,
+            timeout: Duration::new(10, 0),
         };
+    }
+
+    pub fn with_timeout(&mut self, timeout: Duration) -> &mut Self {
+        self.timeout = timeout;
+        self
     }
 
     fn connect(&self) -> Result<TcpStream, std::io::Error> {
@@ -37,7 +44,7 @@ impl Client {
         for socket in sockets {
 
             // Try to connect
-            let result = TcpStream::connect_timeout(&socket, Duration::new(1, 0));
+            let result = TcpStream::connect_timeout(&socket, self.timeout);
             if result.is_ok() {
                 return Ok(result.unwrap());
             } else {

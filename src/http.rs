@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fmt::Error, io::{BufReader, BufRead}, net::TcpStream};
+use std::{collections::HashMap, io::{self, BufRead, BufReader, Read}, net::TcpStream, str};
 
 #[derive(Clone, PartialEq)]
 pub enum HTTPMethod {
@@ -53,7 +53,7 @@ impl RequestLine {
     }
 }
 
-pub trait HTTPHeaders {
+pub trait HTTPMessage {
     fn headers(&self) -> &HashMap<String, String>;
 
     fn expected_body_length(&self) -> usize {
@@ -64,6 +64,17 @@ pub trait HTTPHeaders {
         let length_str = self.headers().get(&key).unwrap();
         let err = format!("Could not parse Content-Length: {}", length_str);
         return length_str.parse::<usize>().expect(&err);
+    }
+
+    fn read_body(&self, mut reader: BufReader<&TcpStream>) -> Result<String, io::Error> {
+        let mut result = String::new();
+        let body_len = self.expected_body_length();
+        while result.len() < body_len {
+            let mut buf  = [0_u8; 1];
+            reader.read_exact(&mut buf)?;
+            result.push_str(str::from_utf8(&buf).expect("UTF8 parsing error"));
+        }
+        return Ok(result);
     }
 }
 
@@ -148,16 +159,17 @@ impl HTTPRequest {
             raw.push(line);
         }
         let mut request = HTTPRequest::parse(raw)?;
-        let body_len = request.expected_body_length();
 
-        while request.body.len() < body_len {
-            reader.read_line(&mut request.body).expect("Could not read line");
-        }
+        // Get the body
+        request.body = match request.read_body(reader) {
+            Ok(value) => value,
+            Err(_) => return Err(HTTPResponseCode::BadRequest),
+        };
         return Ok(request);
     }
 }
 
-impl HTTPHeaders for HTTPRequest {
+impl HTTPMessage for HTTPRequest {
     fn headers(&self) -> &HashMap<String, String> {
         return &self.headers;
     }
@@ -279,11 +291,13 @@ impl HTTPResponse {
             raw.push(line);
         }
         let mut response = HTTPResponse::parse(raw)?;
-        let body_len = response.expected_body_length();
 
-        while response.content.len() < body_len {
-            reader.read_line(&mut response.content).expect("Could not read line");
-        }
+        // Get the body
+        response.content = match response.read_body(reader) {
+            Ok(value) => value,
+            Err(_) => return None,
+        };
+
         return Some(response);
     }
 
@@ -308,7 +322,7 @@ impl HTTPResponse {
     }
 }
 
-impl HTTPHeaders for HTTPResponse {
+impl HTTPMessage for HTTPResponse {
     fn headers(&self) -> &HashMap<String, String> {
         return &self.headers;
     }

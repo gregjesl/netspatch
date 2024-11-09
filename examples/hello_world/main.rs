@@ -11,7 +11,7 @@ fn main() {
 
     // Create the server
     print!("Attempting to start server... ");
-    let server = Server::start(&host, port, stack).expect("Could not start server");
+    let server = Server::start(&host, port, stack, Duration::new(2, 0)).expect("Could not start server");
     println!("Server started");
 
     // Wait
@@ -38,9 +38,10 @@ fn main() {
         sleep(Duration::new(1, 0));
     }
 
-    print!("Attempting to shut down server... ");
+    print!("Waiting for server to shut down automatically... ");
 
-    // Shutdown
-    server.stop().expect("Could not stop server");
+    while server.is_running() {
+        sleep(Duration::new(0, 1000000));
+    }
     println!("Server stopped");
 }

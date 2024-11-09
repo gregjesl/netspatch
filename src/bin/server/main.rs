@@ -1,12 +1,13 @@
 use std::{
-    env, io::{prelude::*, BufReader}, net::{TcpListener, TcpStream}, process::exit, sync::{Arc, Mutex}
+    env, process::exit, sync::{Arc, Mutex}, time::Duration
 };
 
-use netspatch::{http::{HTTPMethod, HTTPRequest, HTTPResponse}, job::JobManager};
+use netspatch::{job::JobManager, server::Server};
 
 fn main() {
     let mut host = "localhost".to_string();
-    let mut port = "7878".to_string();
+    let mut port = 7878_u32;
+    let mut fuse = Duration::new(0, 0);
 
     let mut args: Vec<String> = env::args().collect();
     args.remove(0);
@@ -22,13 +23,27 @@ fn main() {
             }
             "--port" => {
                 args.remove(0);
-                port = args.first().unwrap().to_string();
+                let port_str = args.first().unwrap().to_string();
                 // Check for valid port
-                for c in port.chars() {
+                for c in port_str.chars() {
                     if !c.is_numeric() { 
                         panic!("Invalid port number");
                     }
                 }
+                port = port_str.parse::<u32>().expect("Could not parse port");
+                args.remove(0);
+            }
+            "--fuse" => {
+                args.remove(0);
+                let fuse_str = args.first().unwrap().to_string();
+                // Check for valid port
+                for c in fuse_str.chars() {
+                    if !c.is_numeric() { 
+                        panic!("Invalid fuse");
+                    }
+                }
+                let fuse_len = fuse_str.parse::<u64>().expect("Could not parse fuse");
+                fuse = Duration::new(fuse_len, 0);
                 args.remove(0);
             }
             dimension => {
@@ -50,54 +65,7 @@ fn main() {
     assert!(dimensions.len() > 0);
     let stack = Arc::new(Mutex::new(JobManager::new(&dimensions).unwrap()));
 
-    let addr = format!("{}:{}", host, port);
-    println!("Address: {addr}");
-    let listener = TcpListener::bind(addr).unwrap();
+    let server = Server::start(&host, port, stack, fuse).expect("Could not start server");
 
-    for stream in listener.incoming() {
-        let stream = stream.unwrap();
-
-        handle_connection(stream, stack.clone());
-    }
-}
-
-fn handle_connection(mut stream: TcpStream, index: Arc<Mutex<JobManager>>) {
-    let buf_reader = BufReader::new(&mut stream);
-
-    let raw: Vec<_> = buf_reader
-            .lines()
-            .map(|result| result.unwrap())
-            .take_while(|line| !line.is_empty())
-            .collect();
-
-    match HTTPRequest::parse(raw) {
-        Ok(request) => {
-            match request.method {
-                HTTPMethod::GET => {
-                    
-                    let mut response = HTTPResponse::new(netspatch::http::HTTPResponseCode::OK);
-                    if request.uri.len() > 0 {
-                        response = HTTPResponse::new(netspatch::http::HTTPResponseCode::NotFound);
-                    } else {
-                        let mut payload = index.lock().unwrap();
-                        match (*payload).pop() {
-                            Some(job) => {
-                                response.content = job.to_string();
-                            }
-                            None => {
-                                response = HTTPResponse::new(netspatch::http::HTTPResponseCode::NoContent);
-                            }
-                        }
-                    }
-                    stream.write_all(response.as_string().as_bytes()).unwrap();
-                }
-                HTTPMethod::POST => {
-                    stream.write_all(HTTPResponse::new(netspatch::http::HTTPResponseCode::MethodNotAllowed).as_string().as_bytes()).unwrap();
-                }
-            }
-        }
-        Err(code) => {
-            stream.write_all(HTTPResponse::new(code).as_string().as_bytes()).unwrap();
-        }
-    }
+    server.wait();
 }

@@ -1,5 +1,5 @@
 use std::{
-    io::{prelude::*, BufReader}, net::{TcpListener, TcpStream}, sync::{Arc, Mutex}, thread::{self, JoinHandle}
+    io::{prelude::*, BufReader}, net::{TcpListener, TcpStream}, sync::{Arc, Mutex, Barrier}, thread::{self, sleep, JoinHandle}, time::Duration
 };
 
 use crate::{client::Client, http::*, job::JobManager};
@@ -9,16 +9,27 @@ pub struct Server {
     port: u32,
     handle: JoinHandle<()>,
     shutdown: Arc<Mutex<bool>>,
+    run_mutex: Arc<Mutex<bool>>,
 }
 
 impl Server {
-    pub fn start(host: &String, port: u32, stack: Arc<Mutex<JobManager>>) -> Result<Self, std::io::Error> {
+    pub fn start(host: &String, port: u32, stack: Arc<Mutex<JobManager>>, fuse: Duration) -> Result<Arc<Self>, std::io::Error> {
         let addr = format!("{}:{}", host, port);
         let listener = TcpListener::bind(addr)?;
         let shutdown = Arc::new(Mutex::new(false));
         let thread_shutdown = shutdown.clone();
+        let watchdog_stack = stack.clone();
 
+        // Create the run mutex and hold it until the server has started
+        let run_mutex = Arc::new(Mutex::new(false));
+        let thread_mutex = run_mutex.clone();
+        let barrier = Arc::new(Barrier::new(2));
+        let thread_barrier = barrier.clone();
+
+        // Start the server thread
         let handle = thread::spawn(move || {
+            let _hold = thread_mutex.lock().unwrap();
+            thread_barrier.wait();
             for stream in listener.incoming() {
                 if stream.is_ok() {
                     handle_connection(stream.unwrap(), stack.clone());
@@ -30,24 +41,57 @@ impl Server {
             }
         });
 
-        return Ok(Self {
+        let result = Arc::new(Self {
             host: host.clone(),
             port,
             handle,
             shutdown,
+            run_mutex: run_mutex.clone(),
         });
+
+        let watchdog_server = result.clone();
+
+        thread::spawn(move || {
+            loop {
+                let mut shutdown = false;
+                {
+                    let check = watchdog_stack.lock().unwrap();
+                    if check.is_finished() {
+                        shutdown = true;
+                    }
+                }
+                if shutdown {
+                    break;
+                } else {
+                    sleep(Duration::new(1, 0));
+                }
+            }
+            sleep(fuse);
+            watchdog_server.stop().expect("Could not signal server stop");
+        });
+
+        barrier.wait();
+
+        return Ok(result);
     }
 
-    pub fn stop(self) -> Result<(), std::io::Error> {
-        let mut client = Client::new(self.host, self.port);
+    pub fn stop(&self) -> Result<(), std::io::Error> {
+        let mut client = Client::new(self.host.clone(), self.port);
         {
             let mut lock = self.shutdown.lock().unwrap();
             *lock = true;
             let request = HTTPRequest::new(crate::http::HTTPMethod::GET, "server".to_string());
             client.send(request)?;
         }
-        self.handle.join().expect("Could not join server thread");
         return Ok(());
+    }
+
+    pub fn wait(&self) {
+        let _hold = self.run_mutex.lock().unwrap();
+    }
+
+    pub fn is_running(&self) -> bool {
+        return !self.handle.is_finished();
     }
 }
 
