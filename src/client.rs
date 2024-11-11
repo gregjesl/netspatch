@@ -32,8 +32,8 @@ impl Client {
         self
     }
 
-    pub fn with_retries(&mut self, timeout: Duration) -> &mut Self {
-        self.timeout = timeout;
+    pub fn with_retries(&mut self, retries: u64) -> &mut Self {
+        self.retries = retries;
         self
     }
 
