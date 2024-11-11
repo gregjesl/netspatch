@@ -261,11 +261,11 @@ impl HTTPResponse {
         }
         let startline = raw.first()?;
         let (version, rem) = startline.split_once(' ')?;
-        let (code, text) = rem.split_once(' ')?;
+        let (code, _) = rem.split_once(' ')?;
         let mut headers = HashMap::new();
         for i in 1..raw.len() {
             let (key, value) = raw.get(i)?.split_once(": ")?;
-            let mut value_string = value.to_string();
+            let value_string = value.to_string();
             headers.insert(key.to_string(), value_string);
         }
         return Some(Self {
