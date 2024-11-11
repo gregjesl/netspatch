@@ -9,7 +9,7 @@ srun --ntasks 1 --exclusive -w "$(hostname)" cargo run -q --bin server -- --host
 echo "Server launched"
 
 echo -n "Launching three client tasks... "
-srun --ntasks 3 --exclusive cargo run -q --example slurm -- --host "$addr" --port 7878 &
+srun --ntasks 3 --exclusive cargo run -q --example slurm -- --host "$addr" --port 7878 --timeout 1 --retries 5 &
 echo "Clients launched"
 wait
 echo "Tasks complete"
