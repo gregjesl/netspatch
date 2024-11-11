@@ -7,6 +7,7 @@ pub struct Client {
     port: u32,
     pub job: Option<Job>,
     timeout: Duration,
+    retries: u64,
 }
 
 pub enum GetJobResult {
@@ -21,11 +22,17 @@ impl Client {
             host,
             port,
             job: None,
-            timeout: Duration::new(10, 0),
+            timeout: Duration::new(1, 0),
+            retries: 0
         };
     }
 
     pub fn with_timeout(&mut self, timeout: Duration) -> &mut Self {
+        self.timeout = timeout;
+        self
+    }
+
+    pub fn with_retries(&mut self, timeout: Duration) -> &mut Self {
         self.timeout = timeout;
         self
     }
@@ -47,20 +54,22 @@ impl Client {
             return Err(err);
         }
 
-        // Loop through all socket(s)
-        for socket in sockets {
+        for _ in 0..=self.retries {
+            // Loop through all socket(s)
+            for socket in sockets.clone() {
 
-            // Try to connect
-            let result = TcpStream::connect_timeout(&socket, self.timeout);
-            if result.is_ok() {
-                return Ok(result.unwrap());
-            } else {
-                err = result.err().unwrap();   
+                // Try to connect
+                let result = TcpStream::connect_timeout(&socket, self.timeout);
+                if result.is_ok() {
+                    return Ok(result.unwrap());
+                } else {
+                    err = result.err().unwrap();   
+                }
+                continue;
             }
-            continue;
         }
 
-        eprintln!("{num_sockets} sockets tried, all connections failed");
+        eprintln!("{num_sockets} socket(s) tried, all connections failed");
         return Err(err);
     }
 
