@@ -40,6 +40,13 @@ impl Client {
         // Cache the last error
         let mut err = std::io::Error::last_os_error();
 
+        // Check for no sockets
+        let num_sockets = sockets.len();
+        if num_sockets == 0 {
+            eprintln!("No socket addresses found");
+            return Err(err);
+        }
+
         // Loop through all socket(s)
         for socket in sockets {
 
@@ -52,6 +59,8 @@ impl Client {
             }
             continue;
         }
+
+        eprintln!("{num_sockets} sockets tried, all connections failed");
         return Err(err);
     }
 
@@ -66,8 +75,14 @@ impl Client {
 
         // Get the response
         return match HTTPResponse::read(buf_reader) {
-            Some(value) => Ok(value),
-            None => return Err(std::io::Error::last_os_error())
+            Ok(value) => Ok(value),
+            Err(raw) => {
+                eprintln!("Error parsing HTTP response:");
+                for line in raw {
+                    eprintln!("  {line}");
+                }
+                return Err(std::io::Error::last_os_error())
+            }
         };
     }
 
@@ -81,7 +96,10 @@ impl Client {
         // Send the request
         let response = match self.send(request) {
             Ok(value) => value,
-            Err(_) => return GetJobResult::Error
+            Err(code) => {
+                eprintln!("Error during query: {}", code.to_string());
+                return GetJobResult::Error
+            }
         };
 
         // Handle the response
@@ -99,6 +117,7 @@ impl Client {
                 return GetJobResult::NoJobsLeft;
             }
             _default => {
+                eprintln!("Unexpected response code encountered");
                 return GetJobResult::Error;
             }
         }

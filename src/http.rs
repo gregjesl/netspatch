@@ -276,7 +276,7 @@ impl HTTPResponse {
         });
     }
 
-    pub fn read(mut reader: BufReader<&TcpStream>) -> Option<HTTPResponse> {
+    pub fn read(mut reader: BufReader<&TcpStream>) -> Result<HTTPResponse, Vec<String>> {
         let mut raw = Vec::new();
         loop {
             let mut line = String::new();
@@ -284,21 +284,24 @@ impl HTTPResponse {
             if line == "\r\n" {
                 break;
             } else if line.len() == 0 {
-                return None;
+                return Err(raw.clone());
             }
             line.pop();
             line.pop();
             raw.push(line);
         }
-        let mut response = HTTPResponse::parse(raw)?;
+        let mut response = match HTTPResponse::parse(raw.clone()) {
+            Some(value) => value,
+            None => { return Err(raw.clone()); }
+        };
 
         // Get the body
         response.content = match response.read_body(reader) {
             Ok(value) => value,
-            Err(_) => return None,
+            Err(_) => return Err(raw.clone()),
         };
 
-        return Some(response);
+        return Ok(response);
     }
 
     pub fn as_string(&self) -> String {
