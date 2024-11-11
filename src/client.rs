@@ -1,4 +1,4 @@
-use std::{collections::btree_map::Values, default, io::{BufRead, BufReader, Read, Write}, net::{TcpStream, ToSocketAddrs}, time::Duration};
+use std::{io::{BufReader, Write}, net::{TcpStream, ToSocketAddrs}, time::Duration};
 
 use crate::{http::{HTTPMethod, HTTPRequest, HTTPResponse, HTTPResponseCode}, job::Job};
 
