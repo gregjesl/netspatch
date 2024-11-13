@@ -17,6 +17,12 @@ pub enum GetJobResult {
     Error,
 }
 
+impl GetJobResult {
+    pub fn success(&self) -> bool {
+        return self.eq(&Self::JobLoaded);
+    }
+}
+
 impl Client {
     pub fn new(host: String, port: u32) -> Self {
         return Self {
@@ -146,14 +152,5 @@ impl Client {
         // Send the request
         self.send(request).expect("Error when sending job response");
         self.job = None;
-    }
-}
-
-impl Iterator for Client {
-    type Item = Job;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.query();
-        return self.job.clone();
     }
 }
