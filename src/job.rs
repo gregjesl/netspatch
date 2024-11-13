@@ -98,7 +98,7 @@ impl std::iter::Iterator for JobDimension {
 
 #[derive(PartialEq, Eq, Clone, Hash)]
 pub struct Job {
-    index: Vec<JobDimension>,
+    pub index: Vec<JobDimension>,
 }
 
 impl Job {
