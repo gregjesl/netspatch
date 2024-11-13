@@ -10,6 +10,7 @@ pub struct Client {
     retries: u64,
 }
 
+#[derive(PartialEq, Eq, Clone, Debug)]
 pub enum GetJobResult {
     JobLoaded,
     NoJobsLeft,
@@ -145,5 +146,14 @@ impl Client {
         // Send the request
         self.send(request).expect("Error when sending job response");
         self.job = None;
+    }
+}
+
+impl Iterator for Client {
+    type Item = Job;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.query();
+        return self.job.clone();
     }
 }
