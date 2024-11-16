@@ -9,7 +9,7 @@ pub enum Error {
     JobNotFound,
 }
 
-#[derive(PartialEq, Eq, Clone, Hash)]
+#[derive(PartialEq, Eq, Clone, Copy, Hash, Debug)]
 pub struct JobDimension {
     pub index: usize,
     pub span: usize,
@@ -83,6 +83,15 @@ impl JobDimension {
     }
 }
 
+impl Default for JobDimension {
+    fn default() -> Self {
+        return Self {
+            index: 0,
+            span: 1,
+        }
+    }
+}
+
 impl std::iter::Iterator for JobDimension {
     type Item = usize;
     fn next(&mut self) -> Option<Self::Item> {
@@ -98,7 +107,7 @@ impl std::iter::Iterator for JobDimension {
 
 #[derive(PartialEq, Eq, Clone, Hash)]
 pub struct Job {
-    pub index: Vec<JobDimension>,
+    index: Vec<JobDimension>,
 }
 
 impl Job {
@@ -144,6 +153,17 @@ impl Job {
 
     pub fn order(&self) -> usize {
         return self.index.len();
+    }
+
+    pub fn vec(&self) -> &Vec<JobDimension> {
+        return &self.index;
+    }
+
+    pub fn to_array<const N: usize>(&self) -> Result<[JobDimension; N], Vec<JobDimension>> {
+        if N != self.index.len() {
+            return Err(self.index.clone());
+        }
+        return <[JobDimension; N]>::try_from(self.index.clone());
     }
 
     pub fn dimensions(&self) -> Vec<usize> {
@@ -346,6 +366,26 @@ mod tests {
             assert_eq!(lower, 0.5);
             assert_eq!(upper, 1.0);
             assert_eq!(test.as_fraction(), 0.75);
+        }
+    }
+
+    #[test]
+    fn test_job_to_array() {
+        let mut stack = JobStack::new(&vec![2, 3, 4]).unwrap();
+        assert_eq!(stack.order(), 3);
+        for i in 0..2 {
+            for j in 0..3 {
+                for k in 0..4 {
+                    let job = stack.next().unwrap();
+                    let array: [JobDimension; 3] = job.to_array().unwrap();
+                    assert_eq!(array[0].index, i);
+                    assert_eq!(array[0].span, 2);
+                    assert_eq!(array[1].index, j);
+                    assert_eq!(array[1].span, 3);
+                    assert_eq!(array[2].index, k);
+                    assert_eq!(array[2].span, 4);
+                }
+            }
         }
     }
 
